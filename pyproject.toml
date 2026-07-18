@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xhs-read-mcp"
+version = "0.1.0"
+description = "Local, single-user, read-only Xiaohongshu MCP server"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.28,<2",
+    "playwright>=1.51,<2",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+    "tzdata>=2024.1; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<2",
+]
+
+[project.scripts]
+xhs-read-mcp = "xhs_read_mcp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra -m 'not browser and not live_xhs'"
+markers = [
+    "browser: requires a locally installed Playwright Chromium",
+    "live_xhs: accesses the real Xiaohongshu website and may require manual login",
+]
