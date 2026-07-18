@@ -1,0 +1,31 @@
+name: xhs-read-mcp
+
+services:
+  xhs-mcp:
+    image: ghcr.io/kzi-22/xhs_mcp:latest
+    pull_policy: always
+    container_name: xhs-read-mcp
+    restart: unless-stopped
+    init: true
+    shm_size: "1gb"
+    stop_grace_period: 30s
+
+    ports:
+      - "127.0.0.1:8765:8765"
+
+    environment:
+      XHS_MCP_TRANSPORT: streamable-http
+      XHS_MCP_HOST: 0.0.0.0
+      XHS_MCP_PORT: "8765"
+      XHS_MCP_ALLOW_NON_LOOPBACK: "true"
+      XHS_MCP_ALLOWED_HOSTS: localhost:8765,127.0.0.1:8765
+      XHS_MCP_ALLOWED_ORIGINS: http://localhost:8765,http://127.0.0.1:8765
+      XHS_BROWSER_HEADLESS: "true"
+      XHS_AUTH_STATE_PATH: /data/storage_state.json
+      XHS_DEBUG_ARTIFACTS_PATH: /data/debug-artifacts
+
+    volumes:
+      - xhs-data:/data
+
+volumes:
+  xhs-data:

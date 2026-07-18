@@ -21,6 +21,8 @@
 - 可运行 Chromium 的本机环境。
 - 能正常访问小红书网页的网络。
 
+使用 Docker Compose 部署时，本机不需要安装 Python 或 Chromium，只需要 Docker Compose v2。
+
 ## 安装
 
 Windows PowerShell 示例：
@@ -34,6 +36,40 @@ python -m venv .venv
 ```
 
 也可以使用 uv 安装；项目使用标准 `pyproject.toml`，不依赖特定包管理器。
+
+## Docker Compose 一键部署
+
+仓库镜像由 GitHub Actions 自动构建并发布到 `ghcr.io/kzi-22/xhs_mcp`。下载本仓库的 `compose.yaml` 后运行：
+
+> 仓库维护者首次发布镜像后，需要在 GitHub Package 设置中将 `xhs_mcp` 的可见性改为 Public；否则匿名用户无法通过 Compose 拉取镜像。
+
+```powershell
+docker compose up -d
+docker compose logs xhs-mcp
+```
+
+首次启动会自动生成 MCP Bearer Token，并将 Token 和访问地址写入容器日志。默认访问地址：
+
+```text
+http://127.0.0.1:8765/mcp
+```
+
+调用方需要发送日志中显示的 Token：
+
+```http
+Authorization: Bearer <token>
+```
+
+二维码登录仍通过 `xhs_start_login` 返回，不需要为容器配置桌面或 VNC。登录状态和自动生成的 Token 保存在 `xhs-data` Docker Volume 中，容器升级或重启不会丢失。
+
+更新镜像：
+
+```powershell
+docker compose pull
+docker compose up -d
+```
+
+默认 Compose 只把端口发布到宿主机 `127.0.0.1`。如需远程访问，应使用 HTTPS 反向代理，并同步配置允许的 Host 和 Origin；不要把明文 Bearer Token 暴露在公网 HTTP 上。
 
 ## 启动
 
@@ -169,6 +205,10 @@ CLI > 环境变量 > .env > 默认值
 | `XHS_MCP_HOST` | `127.0.0.1` |
 | `XHS_MCP_PORT` | `8765` |
 | `XHS_MCP_PATH` | `/mcp` |
+| `XHS_MCP_AUTH_TOKEN` | 空 |
+| `XHS_MCP_ALLOW_NON_LOOPBACK` | `false` |
+| `XHS_MCP_ALLOWED_HOSTS` | 空，逗号分隔 |
+| `XHS_MCP_ALLOWED_ORIGINS` | 空，逗号分隔 |
 | `XHS_BROWSER_HEADLESS` | `true` |
 | `XHS_BROWSER_PATH` | Playwright 管理的 Chromium |
 | `XHS_BROWSER_CHANNEL` | 空 |

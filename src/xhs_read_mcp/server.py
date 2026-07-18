@@ -125,11 +125,17 @@ async def _progress(context: Context, value: float, message: str) -> None:
         return
 
 
+def _comma_separated_values(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def _transport_security(config: AppConfig) -> TransportSecuritySettings:
     host = config.mcp_host
     port = config.mcp_port
     allowed_hosts = [f"{host}:{port}"]
     allowed_origins = [f"http://{host}:{port}", f"https://{host}:{port}"]
+    allowed_hosts.extend(_comma_separated_values(config.mcp_allowed_hosts))
+    allowed_origins.extend(_comma_separated_values(config.mcp_allowed_origins))
     if host in {"127.0.0.1", "localhost", "::1"}:
         allowed_hosts.extend(
             [f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"]

@@ -52,6 +52,8 @@ class AppConfig(BaseSettings):
     mcp_path: str = "/mcp"
     mcp_auth_token: SecretStr | None = None
     mcp_allow_non_loopback: bool = False
+    mcp_allowed_hosts: str = ""
+    mcp_allowed_origins: str = ""
 
     browser_headless: bool = True
     browser_path: Path | None = None
