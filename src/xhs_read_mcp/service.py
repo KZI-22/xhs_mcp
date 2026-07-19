@@ -30,6 +30,8 @@ from xhs_read_mcp.models.public import (
 
 
 logger = logging.getLogger("xhs_read_mcp.service")
+_MIN_CHECK_LOGIN_GRACE_SECONDS = 1.0
+_MAX_CHECK_LOGIN_GRACE_SECONDS = 5.0
 
 
 class XhsReadService:
@@ -46,8 +48,10 @@ class XhsReadService:
     ) -> None:
         self.config = config
         self.auth_store = auth_store or AuthStateStore(config.auth_state_path)
-        self.browser_manager = browser_manager or BrowserManager(config, self.auth_store)
-        self.login_action = login_action or LoginAction()
+        self.browser_manager = browser_manager or BrowserManager(
+            config, self.auth_store
+        )
+        self.login_action = login_action or LoginAction(config)
         self.login_coordinator = login_coordinator or LoginCoordinator(
             config, self.browser_manager, self.login_action
         )
@@ -62,22 +66,57 @@ class XhsReadService:
         await self.browser_manager.close()
 
     async def check_login(self) -> LoginStatusResult:
+        has_saved_state = await self.auth_store.exists()
+        context_may_be_authenticated = getattr(
+            self.browser_manager, "auth_state_may_be_present", True
+        )
+        if not has_saved_state and not context_may_be_authenticated:
+            return LoginStatusResult(is_logged_in=False, checked_at=self._now_iso())
+
+        async def operation() -> bool:
+            async with self.browser_manager.page() as page:
+                return await self.login_action.check_login_status(
+                    page, self.config.status_timeout_seconds
+                )
+
+        task = asyncio.create_task(operation(), name="xhs-check-login")
         try:
-            async with asyncio.timeout(self.config.status_timeout_seconds):
-                async with self.browser_manager.page() as page:
-                    is_logged_in = await self.login_action.check_login_status(
-                        page, self.config.status_timeout_seconds
-                    )
+            grace = min(
+                _MAX_CHECK_LOGIN_GRACE_SECONDS,
+                max(
+                    _MIN_CHECK_LOGIN_GRACE_SECONDS,
+                    self.config.status_timeout_seconds * 0.2,
+                ),
+            )
+            done, _ = await asyncio.wait(
+                {task}, timeout=self.config.status_timeout_seconds + grace
+            )
+            if task not in done:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                raise XhsError(
+                    ErrorCode.TIMEOUT,
+                    "检查登录状态超时。",
+                    retryable=True,
+                )
+            is_logged_in = await task
             if is_logged_in:
                 self.browser_manager.mark_operation_success()
                 try:
                     await self.browser_manager.persist_state()
                 except XhsError:
-                    logger.warning("Could not persist refreshed state after login check")
+                    logger.warning(
+                        "Could not persist refreshed state after login check"
+                    )
             return LoginStatusResult(
                 is_logged_in=is_logged_in,
                 checked_at=self._now_iso(),
             )
+        except asyncio.CancelledError:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
         except TimeoutError as exc:
             raise XhsError(
                 ErrorCode.TIMEOUT,
@@ -133,7 +172,10 @@ class XhsReadService:
     async def get_note_detail(self, request: DetailRequest) -> NoteDetailResult:
         await self._require_login()
         overall_timeout = self.config.detail_timeout_seconds
-        if request.comment_mode is CommentMode.LOAD and request.comment_options is not None:
+        if (
+            request.comment_mode is CommentMode.LOAD
+            and request.comment_options is not None
+        ):
             overall_timeout = min(
                 max(overall_timeout, request.comment_options.timeout_seconds),
                 self.config.max_comment_timeout_seconds,
@@ -183,8 +225,10 @@ class XhsReadService:
             )
 
     def _now_iso(self) -> str:
-        return datetime.now(UTC).astimezone(ZoneInfo(self.config.timezone)).isoformat(
-            timespec="seconds"
+        return (
+            datetime.now(UTC)
+            .astimezone(ZoneInfo(self.config.timezone))
+            .isoformat(timespec="seconds")
         )
 
     @staticmethod
@@ -195,4 +239,3 @@ class XhsReadService:
             retryable=True,
             details={"reason": type(exc).__name__},
         )
-

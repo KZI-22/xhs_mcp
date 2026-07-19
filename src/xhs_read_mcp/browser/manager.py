@@ -73,6 +73,7 @@ class BrowserManager:
         self._disconnected = False
         self._rebuild_attempted = False
         self._persist_on_close = False
+        self._auth_state_may_be_present = False
 
     @property
     def active_page_count(self) -> int:
@@ -81,6 +82,12 @@ class BrowserManager:
     @property
     def is_started(self) -> bool:
         return self._context is not None and self._browser_is_connected()
+
+    @property
+    def auth_state_may_be_present(self) -> bool:
+        """Whether the current context may hold a login not represented by a file."""
+
+        return self._auth_state_may_be_present
 
     async def start(self) -> None:
         async with self._lifecycle_lock:
@@ -117,6 +124,7 @@ class BrowserManager:
             if state is not None:
                 context_options["storage_state"] = state
             self._persist_on_close = state is not None
+            self._auth_state_may_be_present = state is not None
             self._context = await self._browser.new_context(**context_options)
             self._disconnected = False
         except XhsError:
@@ -150,6 +158,11 @@ class BrowserManager:
 
     def mark_operation_success(self) -> None:
         self._rebuild_attempted = False
+
+    def mark_authentication_possible(self) -> None:
+        """Keep login checks on-page while a QR session can mutate the context."""
+
+        self._auth_state_may_be_present = True
 
     @asynccontextmanager
     async def page(self) -> AsyncIterator[Page]:
@@ -197,6 +210,7 @@ class BrowserManager:
                     ) from exc
                 changed = await self.auth_store.save(state)
                 self._persist_on_close = True
+                self._auth_state_may_be_present = True
                 return changed
 
     async def clear_auth_state(self) -> bool:
@@ -217,6 +231,7 @@ class BrowserManager:
                 self._context = None
             deleted = await self.auth_store.delete()
             self._persist_on_close = False
+            self._auth_state_may_be_present = False
             if not self._browser_is_connected():
                 await self._close_browser_locked()
                 await self._start_locked()

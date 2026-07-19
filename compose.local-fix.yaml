@@ -1,0 +1,9 @@
+# Build:    docker build --pull=false -f Dockerfile.local-fix -t xhs-read-mcp:login-flow-fix-20260719 .
+# Deploy:   docker compose -f compose.yaml -f compose.local-fix.yaml up -d --no-deps xhs-mcp
+# Rollback: docker compose -f compose.yaml up -d --force-recreate xhs-mcp
+services:
+  xhs-mcp:
+    image: xhs-read-mcp:login-flow-fix-20260719
+    pull_policy: never
+    environment:
+      XHS_DEBUG_ARTIFACTS: "true"

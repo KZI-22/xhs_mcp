@@ -14,6 +14,7 @@ class FakeBrowserManager:
     def __init__(self) -> None:
         self.persist_count = 0
         self.success_count = 0
+        self.authentication_possible_count = 0
 
     @asynccontextmanager
     async def page(self):
@@ -25,6 +26,9 @@ class FakeBrowserManager:
 
     def mark_operation_success(self) -> None:
         self.success_count += 1
+
+    def mark_authentication_possible(self) -> None:
+        self.authentication_possible_count += 1
 
 
 class ControlledLoginAction:
@@ -44,7 +48,9 @@ class ControlledLoginAction:
             return True, None
         return False, b"png"
 
-    async def wait_for_login(self, page, timeout_seconds: float, poll_seconds: float = 0.5):
+    async def wait_for_login(
+        self, page, timeout_seconds: float, poll_seconds: float = 0.5
+    ):
         return await self.result
 
 
@@ -75,6 +81,7 @@ async def test_start_is_idempotent_while_session_is_pending(tmp_path: Path) -> N
     status = await coordinator.get_status(first.result.login_id)
     assert status.status is LoginSessionStatus.SUCCEEDED
     assert browser.persist_count == 1
+    assert browser.authentication_possible_count == 1
 
 
 async def test_force_restart_cancels_old_session(tmp_path: Path) -> None:
@@ -101,12 +108,13 @@ async def test_cancel_updates_session_status(tmp_path: Path) -> None:
 
 async def test_already_logged_in_finishes_without_qr(tmp_path: Path) -> None:
     action = ControlledLoginAction(initially_logged_in=True)
-    coordinator, _ = make_coordinator(tmp_path, action)
+    coordinator, browser = make_coordinator(tmp_path, action)
 
     started = await coordinator.start()
 
     assert started.result.status is LoginSessionStatus.SUCCEEDED
     assert started.qr_png is None
+    assert browser.persist_count == 1
 
 
 async def test_unknown_login_id_has_stable_error(tmp_path: Path) -> None:
@@ -117,3 +125,28 @@ async def test_unknown_login_id_has_stable_error(tmp_path: Path) -> None:
         await coordinator.get_status("missing")
 
     assert captured.value.code is ErrorCode.LOGIN_SESSION_NOT_FOUND
+
+
+async def test_prepare_failure_does_not_leave_unconsumed_future(
+    tmp_path: Path,
+) -> None:
+    action = ControlledLoginAction()
+
+    async def fail_prepare(_page, _timeout_seconds: float):
+        raise XhsError(ErrorCode.PAGE_STRUCTURE_CHANGED, "changed")
+
+    action.prepare_login = fail_prepare
+    coordinator, _ = make_coordinator(tmp_path, action)
+    unhandled: list[dict] = []
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
+    try:
+        with pytest.raises(XhsError) as captured:
+            await coordinator.start()
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous_handler)
+
+    assert captured.value.code is ErrorCode.PAGE_STRUCTURE_CHANGED
+    assert unhandled == []

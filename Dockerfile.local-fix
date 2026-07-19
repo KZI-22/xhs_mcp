@@ -1,0 +1,6 @@
+# Reuse the already deployed runtime and Chromium; only overlay reviewed source.
+FROM ghcr.io/kzi-22/xhs_mcp:latest
+
+ENV PYTHONPATH=/app/src
+
+COPY src /app/src

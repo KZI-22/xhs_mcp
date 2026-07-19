@@ -8,12 +8,17 @@ def test_error_details_are_redacted() -> None:
     error = XhsError(
         ErrorCode.BROWSER_ERROR,
         "browser failed",
-        details={"xsec_token": "secret", "nested": {"cookie": "value"}},
+        details={
+            "xsec_token": "secret",
+            "nested": {"cookie": "value"},
+            "candidates": [{"tag": "input", "token": "nested-secret"}],
+        },
     )
 
     assert error.to_dict()["details"] == {
         "xsec_token": "***",
         "nested": {"cookie": "***"},
+        "candidates": [{"tag": "input", "token": "***"}],
     }
 
 
@@ -36,4 +41,3 @@ def test_logging_filter_replaces_message() -> None:
 
     assert SensitiveDataFilter().filter(record)
     assert record.getMessage() == "cookie=***"
-

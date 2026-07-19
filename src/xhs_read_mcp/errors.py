@@ -45,13 +45,19 @@ def safe_details(details: Mapping[str, Any] | None) -> dict[str, Any]:
     for key, value in details.items():
         if key.lower() in SENSITIVE_DETAIL_KEYS:
             result[key] = "***"
-        elif isinstance(value, Mapping):
-            result[key] = safe_details(value)
-        elif isinstance(value, (str, int, float, bool)) or value is None:
-            result[key] = value
         else:
-            result[key] = str(value)
+            result[key] = _safe_detail_value(value)
     return result
+
+
+def _safe_detail_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return safe_details(value)
+    if isinstance(value, (list, tuple)):
+        return [_safe_detail_value(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 class XhsError(Exception):
@@ -82,4 +88,3 @@ class XhsError(Exception):
 
 def invalid_argument(message: str, **details: Any) -> XhsError:
     return XhsError(ErrorCode.INVALID_ARGUMENT, message, details=details)
-

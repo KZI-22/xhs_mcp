@@ -47,6 +47,22 @@ class AuthStateStore:
         self._lock = asyncio.Lock()
         self._fingerprint: str | None = None
 
+    async def exists(self) -> bool:
+        """Return whether state is persisted without reading sensitive contents."""
+
+        async with self._lock:
+            try:
+                await asyncio.to_thread(self.path.stat)
+            except FileNotFoundError:
+                return False
+            except OSError as exc:
+                raise XhsError(
+                    ErrorCode.AUTH_STATE_ERROR,
+                    "无法检查本地登录状态。",
+                    details={"path": str(self.path), "reason": type(exc).__name__},
+                ) from exc
+            return True
+
     async def load(self) -> StorageState | None:
         async with self._lock:
             try:
@@ -141,4 +157,3 @@ class AuthStateStore:
                 temporary_path.unlink()
             except FileNotFoundError:
                 pass
-

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
+from urllib.parse import urlsplit
 
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
@@ -12,8 +13,9 @@ from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 from xhs_read_mcp.browser.page_contract import (
     ACCESS_CONTAINER_SELECTOR,
     INACCESSIBLE_TEXTS,
-    LOGGED_IN_SELECTOR,
-    QR_CODE_SELECTOR,
+    LOGGED_IN_SELECTORS,
+    QR_CODE_SELECTORS,
+    RISK_CONTROL_PATH_PREFIXES,
     RISK_CONTROL_TEXTS,
 )
 from xhs_read_mcp.errors import ErrorCode, XhsError
@@ -53,7 +55,13 @@ async def with_retries(
     ) from last_error
 
 
-async def navigate(page: Page, url: str, timeout_seconds: float) -> None:
+async def navigate(
+    page: Page,
+    url: str,
+    timeout_seconds: float,
+    *,
+    attempts: int = 3,
+) -> None:
     async def operation() -> None:
         await page.goto(
             url,
@@ -61,7 +69,7 @@ async def navigate(page: Page, url: str, timeout_seconds: float) -> None:
             timeout=int(timeout_seconds * 1000),
         )
 
-    await with_retries(operation, attempts=3, base_delay_seconds=0.5)
+    await with_retries(operation, attempts=attempts, base_delay_seconds=0.5)
 
 
 async def body_text(page: Page) -> str:
@@ -71,17 +79,33 @@ async def body_text(page: Page) -> str:
         return ""
 
 
+async def _any_visible(page: Page, selectors: tuple[str, ...]) -> bool:
+    for selector in selectors:
+        for locator in (await page.locator(selector).all())[:8]:
+            if await locator.is_visible():
+                return True
+    return False
+
+
 async def raise_for_page_problem(
     page: Page,
     *,
     check_note_access: bool = False,
     check_login_expired: bool = True,
 ) -> None:
+    page_path = urlsplit(page.url).path
+    if any(page_path.startswith(prefix) for prefix in RISK_CONTROL_PATH_PREFIXES):
+        raise XhsError(
+            ErrorCode.RISK_CONTROL,
+            "小红书登录页面触发安全限制，请使用平台允许的可靠网络环境后重试。",
+            retryable=False,
+            details={"page_path": page_path},
+        )
+
     if check_login_expired:
         try:
-            qr = page.locator(QR_CODE_SELECTOR).first
-            qr_visible = await qr.count() > 0 and await qr.is_visible()
-            logged_in = await page.locator(LOGGED_IN_SELECTOR).count() > 0
+            qr_visible = await _any_visible(page, QR_CODE_SELECTORS)
+            logged_in = await _any_visible(page, LOGGED_IN_SELECTORS)
             if qr_visible and not logged_in:
                 raise XhsError(
                     ErrorCode.LOGIN_EXPIRED,
