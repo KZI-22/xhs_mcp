@@ -158,7 +158,7 @@ class SearchAction:
             timeout=int(timeout_seconds * 1000),
         )
 
-        options = group.locator("div.tags")
+        options = group.locator("div.tags:not([aria-hidden='true'])")
         await options.first.wait_for(
             state="visible",
             timeout=int(timeout_seconds * 1000),

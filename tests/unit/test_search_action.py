@@ -127,12 +127,13 @@ class FilterOptions:
 class FilterGroup:
     def __init__(self, labels: list[str]) -> None:
         self.options = FilterOptions(labels)
+        self.requested_selectors: list[str] = []
 
     async def wait_for(self, **_kwargs) -> None:
         return None
 
     def locator(self, selector: str) -> FilterOptions:
-        assert selector == "div.tags"
+        self.requested_selectors.append(selector)
         return self.options
 
 
@@ -154,7 +155,7 @@ def ignore_page_problem(monkeypatch):
     monkeypatch.setattr(search_module, "raise_for_page_problem", no_problem)
 
 
-async def test_filter_option_is_selected_by_label_when_order_changes() -> None:
+async def test_filter_option_ignores_hidden_decoys_when_order_changes() -> None:
     page = FilterPage(["综合", "最新", "最多收藏", "最多评论", "最多点赞"])
     target = FilterTarget(group_index=1, tag_index=3, label="最多点赞")
 
@@ -162,6 +163,9 @@ async def test_filter_option_is_selected_by_label_when_order_changes() -> None:
     await option.click()
 
     assert page.requested_selectors == ["div.filter-panel div.filters:nth-child(1)"]
+    assert page.group.requested_selectors == [
+        "div.tags:not([aria-hidden='true'])"
+    ]
     assert page.group.options.items[4].clicked
     assert not page.group.options.items[2].clicked
 
