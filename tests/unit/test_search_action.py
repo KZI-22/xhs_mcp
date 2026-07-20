@@ -4,6 +4,7 @@ from playwright.async_api import Error as PlaywrightError
 from xhs_read_mcp.actions import search as search_module
 from xhs_read_mcp.actions.search import SearchAction, build_search_result, is_note_payload
 from xhs_read_mcp.browser.page_contract import (
+    FilterTarget,
     SEARCH_EMPTY_RESULT_SCRIPT,
     SEARCH_FEEDS_SCRIPT,
 )
@@ -96,12 +97,89 @@ class SequencedSearchPage:
         raise AssertionError("unexpected browser script")
 
 
+class FilterOption:
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.clicked = False
+
+    async def wait_for(self, **_kwargs) -> None:
+        return None
+
+    async def click(self) -> None:
+        self.clicked = True
+
+
+class FilterOptions:
+    def __init__(self, labels: list[str]) -> None:
+        self.items = [FilterOption(label) for label in labels]
+
+    @property
+    def first(self) -> FilterOption:
+        return self.items[0]
+
+    async def all_inner_texts(self) -> list[str]:
+        return [item.label for item in self.items]
+
+    def nth(self, index: int) -> FilterOption:
+        return self.items[index]
+
+
+class FilterGroup:
+    def __init__(self, labels: list[str]) -> None:
+        self.options = FilterOptions(labels)
+
+    async def wait_for(self, **_kwargs) -> None:
+        return None
+
+    def locator(self, selector: str) -> FilterOptions:
+        assert selector == "div.tags"
+        return self.options
+
+
+class FilterPage:
+    def __init__(self, labels: list[str]) -> None:
+        self.group = FilterGroup(labels)
+        self.requested_selectors: list[str] = []
+
+    def locator(self, selector: str) -> FilterGroup:
+        self.requested_selectors.append(selector)
+        return self.group
+
+
 @pytest.fixture
 def ignore_page_problem(monkeypatch):
     async def no_problem(_page) -> None:
         return None
 
     monkeypatch.setattr(search_module, "raise_for_page_problem", no_problem)
+
+
+async def test_filter_option_is_selected_by_label_when_order_changes() -> None:
+    page = FilterPage(["综合", "最新", "最多收藏", "最多评论", "最多点赞"])
+    target = FilterTarget(group_index=1, tag_index=3, label="最多点赞")
+
+    option = await SearchAction()._find_filter_option(page, target, 1)
+    await option.click()
+
+    assert page.requested_selectors == ["div.filter-panel div.filters:nth-child(1)"]
+    assert page.group.options.items[4].clicked
+    assert not page.group.options.items[2].clicked
+
+
+async def test_missing_filter_label_reports_available_options() -> None:
+    page = FilterPage(["综合", "最新", "最多收藏"])
+    target = FilterTarget(group_index=1, tag_index=3, label="最多点赞")
+
+    with pytest.raises(XhsError) as captured:
+        await SearchAction()._find_filter_option(page, target, 1)
+
+    assert captured.value.code is ErrorCode.PAGE_STRUCTURE_CHANGED
+    assert captured.value.retryable is False
+    assert captured.value.details == {
+        "expected_label": "最多点赞",
+        "group_index": 1,
+        "available_labels": ["综合", "最新", "最多收藏"],
+    }
 
 
 async def test_stable_feeds_waits_for_initial_empty_state_to_fill(

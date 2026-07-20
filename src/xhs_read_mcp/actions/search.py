@@ -8,13 +8,14 @@ from time import perf_counter
 from typing import Any
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError
 from pydantic import ValidationError
 
 from xhs_read_mcp.actions.common import navigate, raise_for_page_problem, with_retries
 from xhs_read_mcp.browser.page_contract import (
     FILTER_PANEL_SELECTOR,
     FILTER_TRIGGER_SELECTOR,
+    FilterTarget,
     SEARCH_EMPTY_RESULT_SCRIPT,
     SEARCH_EMPTY_RESULT_TEXTS,
     SEARCH_FEEDS_READY_SCRIPT,
@@ -142,7 +143,49 @@ class SearchAction:
                 retryable=False,
             ) from exc
 
-    async def _apply_filters(self, page: Page, targets, timeout_seconds: float) -> None:
+    async def _find_filter_option(
+        self,
+        page: Page,
+        target: FilterTarget,
+        timeout_seconds: float,
+    ) -> Locator:
+        group = page.locator(
+            f"{FILTER_PANEL_SELECTOR} "
+            f"div.filters:nth-child({target.group_index})"
+        )
+        await group.wait_for(
+            state="visible",
+            timeout=int(timeout_seconds * 1000),
+        )
+
+        options = group.locator("div.tags")
+        await options.first.wait_for(
+            state="visible",
+            timeout=int(timeout_seconds * 1000),
+        )
+        labels = [" ".join(text.split()) for text in await options.all_inner_texts()]
+        expected_label = " ".join(target.label.split())
+        for index, label in enumerate(labels):
+            if label == expected_label:
+                return options.nth(index)
+
+        raise XhsError(
+            ErrorCode.PAGE_STRUCTURE_CHANGED,
+            "搜索筛选项文案已经变化。",
+            retryable=False,
+            details={
+                "expected_label": target.label,
+                "group_index": target.group_index,
+                "available_labels": labels,
+            },
+        )
+
+    async def _apply_filters(
+        self,
+        page: Page,
+        targets: list[FilterTarget],
+        timeout_seconds: float,
+    ) -> None:
         try:
             await page.locator(FILTER_TRIGGER_SELECTOR).hover(
                 timeout=int(timeout_seconds * 1000)
@@ -151,19 +194,11 @@ class SearchAction:
                 state="visible", timeout=int(timeout_seconds * 1000)
             )
             for target in targets:
-                locator = page.locator(target.selector)
-                await locator.wait_for(state="visible", timeout=int(timeout_seconds * 1000))
-                text = (await locator.inner_text()).strip()
-                if target.label not in text:
-                    raise XhsError(
-                        ErrorCode.PAGE_STRUCTURE_CHANGED,
-                        "搜索筛选项顺序或文案已经变化。",
-                        details={
-                            "expected_label": target.label,
-                            "group_index": target.group_index,
-                            "tag_index": target.tag_index,
-                        },
-                    )
+                locator = await self._find_filter_option(
+                    page,
+                    target,
+                    timeout_seconds,
+                )
                 await locator.click()
             await self._wait_for_feeds(page, timeout_seconds)
         except XhsError:
