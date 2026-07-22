@@ -62,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
     browser_mode.add_argument("--headed", action="store_false", dest="headless")
     parser.set_defaults(headless=None)
     parser.add_argument(
+        "--browser-channel",
+        choices=("chrome", "chromium"),
+        default=None,
+        help="Use installed Google Chrome or Playwright bundled Chromium",
+    )
+    parser.add_argument(
         "--browser-path",
         type=Path,
         default=None,
@@ -85,6 +91,7 @@ def config_from_args(args: argparse.Namespace) -> AppConfig:
         "mcp_auth_token": args.auth_token,
         "mcp_allow_non_loopback": args.allow_non_loopback,
         "browser_headless": args.headless,
+        "browser_channel": args.browser_channel,
         "browser_path": args.browser_path,
         "auth_state_path": args.auth_state_path,
         "log_level": args.log_level,

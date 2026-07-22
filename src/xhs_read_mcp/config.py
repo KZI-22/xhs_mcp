@@ -56,6 +56,7 @@ class AppConfig(BaseSettings):
     mcp_allowed_origins: str = ""
 
     browser_headless: bool = False
+    browser_channel: Literal["chrome", "chromium"] = "chrome"
     browser_path: Path | None = None
     proxy: SecretStr | None = None
 

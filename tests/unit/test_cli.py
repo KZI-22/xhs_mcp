@@ -16,7 +16,15 @@ def test_cli_defaults_defer_to_settings(tmp_path: Path, monkeypatch) -> None:
 
 def test_cli_overrides_transport_and_browser_mode() -> None:
     args = build_parser().parse_args(
-        ["--transport", "streamable-http", "--port", "9000", "--headed"]
+        [
+            "--transport",
+            "streamable-http",
+            "--port",
+            "9000",
+            "--headed",
+            "--browser-channel",
+            "chromium",
+        ]
     )
 
     config = config_from_args(args)
@@ -24,6 +32,7 @@ def test_cli_overrides_transport_and_browser_mode() -> None:
     assert config.mcp_transport == "streamable-http"
     assert config.mcp_port == 9000
     assert not config.browser_headless
+    assert config.browser_channel == "chromium"
 
 
 async def test_bearer_middleware_rejects_missing_token() -> None:

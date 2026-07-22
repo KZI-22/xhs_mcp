@@ -1,4 +1,4 @@
-"""Shared Playwright/Google Chrome lifecycle for the local single-user service."""
+"""Shared Playwright browser lifecycle for the local single-user service."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def build_proxy_settings(proxy_url: str | None) -> dict[str, str] | None:
 
 
 class BrowserManager:
-    """Own one Google Chrome and one authenticated context; lease a page per operation."""
+    """Own one Chromium-family browser and one authenticated context."""
 
     def __init__(
         self,
@@ -106,7 +106,7 @@ class BrowserManager:
             }
             if self.config.browser_path is not None:
                 launch_options["executable_path"] = str(self.config.browser_path)
-            else:
+            elif self.config.browser_channel == GOOGLE_CHROME_CHANNEL:
                 launch_options["channel"] = GOOGLE_CHROME_CHANNEL
             proxy = build_proxy_settings(
                 self.config.proxy.get_secret_value() if self.config.proxy else None
@@ -135,7 +135,7 @@ class BrowserManager:
             await self._close_browser_locked()
             raise XhsError(
                 ErrorCode.BROWSER_ERROR,
-                "无法启动 Google Chrome，请确认已安装 Chrome 或配置了 Chrome 浏览器路径。",
+                "无法启动浏览器，请确认已安装 Google Chrome 或 Playwright Chromium。",
                 retryable=False,
                 details={"reason": type(exc).__name__},
             ) from exc
@@ -150,7 +150,7 @@ class BrowserManager:
                 if self._rebuild_attempted:
                     raise XhsError(
                         ErrorCode.BROWSER_ERROR,
-                        "Google Chrome 已断开，自动重建失败。",
+                        "浏览器已断开，自动重建失败。",
                         retryable=True,
                     )
                 self._rebuild_attempted = True

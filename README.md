@@ -1,6 +1,6 @@
 # xhs-read-mcp
 
-本地单用户、只读的小红书 MCP 服务。项目使用 Python、Playwright Google Chrome 和官方 MCP Python SDK，通过正常加载小红书网页并读取 `window.__INITIAL_STATE__` 提供结构化数据。
+本地单用户、只读的小红书 MCP 服务。项目使用 Python、Playwright 驱动的 Google Chrome（本机）或 Chromium（容器）和官方 MCP Python SDK，通过正常加载小红书网页并读取 `window.__INITIAL_STATE__` 提供结构化数据。
 
 ## 功能范围
 
@@ -40,6 +40,8 @@ python -m venv .venv
 ## Docker Compose 一键部署
 
 仓库镜像由 GitHub Actions 自动构建并发布到 `ghcr.io/kzi-22/xhs_mcp`。下载本仓库的 `compose.yaml` 后运行：
+
+Docker 镜像使用 Playwright 自带的 Chromium，以同时支持 `linux/amd64` 和 `linux/arm64`；本机运行仍默认使用 Google Chrome。
 
 > 仓库维护者首次发布镜像后，需要在 GitHub Package 设置中将 `xhs_mcp` 的可见性改为 Public；否则匿名用户无法通过 Compose 拉取镜像。
 
@@ -215,6 +217,7 @@ CLI > 环境变量 > .env > 默认值
 | `XHS_MCP_ALLOWED_HOSTS` | 空，逗号分隔 |
 | `XHS_MCP_ALLOWED_ORIGINS` | 空，逗号分隔 |
 | `XHS_BROWSER_HEADLESS` | `false`；本机建议保留有界面以完成人工验证 |
+| `XHS_BROWSER_CHANNEL` | `chrome`；可设为 `chromium` 使用 Playwright 自带浏览器，Docker 镜像已设置 |
 | `XHS_BROWSER_PATH` | 空；仅用于非标准安装位置的 Google Chrome |
 | `XHS_PROXY` | 空 |
 | `XHS_AUTH_STATE_PATH` | 平台用户数据目录 |
@@ -267,11 +270,11 @@ MCP tools
     -> XhsReadService
         -> LoginAction / SearchAction / FeedDetailAction / CommentLoader
             -> BrowserManager / AuthStateStore / PageContract
-                -> Playwright Google Chrome
+                -> Playwright Google Chrome / Chromium
                     -> 小红书 DOM 与 window.__INITIAL_STATE__
 ```
 
-一个 MCP 进程长期运行一个 Google Chrome 和一个共享登录 BrowserContext；每次普通调用使用独立 Page，默认最多两个并发浏览器操作。
+一个 MCP 进程长期运行一个 Chromium 系浏览器和一个共享登录 BrowserContext；每次普通调用使用独立 Page，默认最多两个并发浏览器操作。
 
 ## 当前验证状态
 

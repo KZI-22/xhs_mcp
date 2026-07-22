@@ -135,6 +135,26 @@ async def test_default_launch_uses_google_chrome_channel(tmp_path: Path) -> None
     await manager.close(save_state=False)
 
 
+async def test_bundled_chromium_launch_omits_branded_channel(tmp_path: Path) -> None:
+    fake = FakePlaywright()
+    config = AppConfig(
+        _env_file=None,
+        auth_state_path=tmp_path / "state.json",
+        browser_channel="chromium",
+        browser_headless=True,
+    )
+    manager = BrowserManager(
+        config,
+        AuthStateStore(config.auth_state_path),
+        playwright_factory=lambda: FakePlaywrightManager(fake),
+    )
+
+    await manager.start()
+
+    assert fake.chromium.launch_options == {"headless": True}
+    await manager.close(save_state=False)
+
+
 async def test_custom_google_chrome_path_replaces_channel(tmp_path: Path) -> None:
     fake = FakePlaywright()
     chrome_path = tmp_path / "chrome.exe"

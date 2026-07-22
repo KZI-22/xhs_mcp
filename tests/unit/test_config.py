@@ -14,6 +14,7 @@ def test_default_config_is_local_stdio() -> None:
     assert config.mcp_path == "/mcp"
     assert config.max_concurrent_operations == 2
     assert not config.browser_headless
+    assert config.browser_channel == "chrome"
     assert config.browser_path is None
     assert config.auth_state_path.name == "chrome-storage_state.json"
 
@@ -58,6 +59,13 @@ def test_browser_path_must_point_to_google_chrome() -> None:
     chrome_path = Path("C:/Program Files/Google/Chrome/Application/chrome.exe")
     config = AppConfig(_env_file=None, browser_path=chrome_path)
     assert config.browser_path == chrome_path
+
+
+def test_browser_channel_is_limited_to_supported_distributions() -> None:
+    assert AppConfig(_env_file=None, browser_channel="chromium").browser_channel == "chromium"
+
+    with pytest.raises(ValidationError):
+        AppConfig(_env_file=None, browser_channel="firefox")
 
 
 def test_mcp_path_is_normalized() -> None:

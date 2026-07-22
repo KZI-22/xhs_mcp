@@ -6,7 +6,8 @@ LABEL org.opencontainers.image.description="Local, single-user, read-only Xiaoho
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    XHS_BROWSER_CHANNEL=chromium
 
 WORKDIR /app
 
@@ -14,7 +15,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 
 RUN pip install --no-cache-dir . \
-    && python -m playwright install --with-deps chrome \
+    && python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
