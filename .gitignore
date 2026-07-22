@@ -1,6 +1,7 @@
 .env
 .pytest_cache/
 .pytest-tmp/
+.codegraph/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -9,4 +10,3 @@ build/
 dist/
 storage_state.json
 debug-artifacts/
-
