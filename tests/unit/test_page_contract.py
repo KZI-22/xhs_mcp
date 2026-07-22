@@ -61,4 +61,5 @@ def test_all_filter_groups_map_to_expected_dom_positions() -> None:
 def test_ip_risk_redirect_text_is_classified_as_risk_control() -> None:
     assert "IP存在风险" in RISK_CONTROL_TEXTS
     assert "安全限制" in RISK_CONTROL_TEXTS
+    assert "验证码" not in RISK_CONTROL_TEXTS
     assert "/website-login/error" in RISK_CONTROL_PATH_PREFIXES

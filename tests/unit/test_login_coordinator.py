@@ -32,8 +32,14 @@ class FakeBrowserManager:
 
 
 class ControlledLoginAction:
-    def __init__(self, *, initially_logged_in: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        initially_logged_in: bool = False,
+        qr_png: bytes | None = b"png",
+    ) -> None:
         self.initially_logged_in = initially_logged_in
+        self.qr_png = qr_png
         self.result = asyncio.get_running_loop().create_future()
         self.prepare_count = 0
 
@@ -46,7 +52,7 @@ class ControlledLoginAction:
             self.result = asyncio.get_running_loop().create_future()
         if self.initially_logged_in:
             return True, None
-        return False, b"png"
+        return False, self.qr_png
 
     async def wait_for_login(
         self, page, timeout_seconds: float, poll_seconds: float = 0.5
@@ -54,9 +60,15 @@ class ControlledLoginAction:
         return await self.result
 
 
-def make_coordinator(tmp_path: Path, action: ControlledLoginAction):
+def make_coordinator(
+    tmp_path: Path,
+    action: ControlledLoginAction,
+    *,
+    browser_headless: bool = True,
+):
     config = AppConfig(
         _env_file=None,
+        browser_headless=browser_headless,
         auth_state_path=tmp_path / "state.json",
         login_timeout_seconds=1,
     )
@@ -114,6 +126,30 @@ async def test_already_logged_in_finishes_without_qr(tmp_path: Path) -> None:
 
     assert started.result.status is LoginSessionStatus.SUCCEEDED
     assert started.qr_png is None
+    assert browser.persist_count == 1
+
+
+async def test_headed_manual_verification_stays_pending_without_qr(
+    tmp_path: Path,
+) -> None:
+    action = ControlledLoginAction(qr_png=None)
+    coordinator, browser = make_coordinator(
+        tmp_path,
+        action,
+        browser_headless=False,
+    )
+
+    started = await coordinator.start()
+    await asyncio.sleep(0)
+
+    assert started.result.status is LoginSessionStatus.PENDING
+    assert started.qr_png is None
+    assert "Google Chrome" in started.result.message
+    assert "验证码" in started.result.message
+    assert browser.authentication_possible_count == 1
+
+    action.result.set_result(True)
+    await coordinator._session.task
     assert browser.persist_count == 1
 
 

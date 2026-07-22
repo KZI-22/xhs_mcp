@@ -55,13 +55,12 @@ class AppConfig(BaseSettings):
     mcp_allowed_hosts: str = ""
     mcp_allowed_origins: str = ""
 
-    browser_headless: bool = True
+    browser_headless: bool = False
     browser_path: Path | None = None
-    browser_channel: str | None = None
     proxy: SecretStr | None = None
 
     auth_state_path: Path = Field(
-        default_factory=lambda: default_data_dir() / "storage_state.json"
+        default_factory=lambda: default_data_dir() / "chrome-storage_state.json"
     )
     debug_artifacts: bool = False
     debug_artifacts_path: Path = Field(
@@ -98,18 +97,19 @@ class AppConfig(BaseSettings):
             raise ValueError("MCP host cannot be empty")
         return value
 
-    @field_validator("browser_channel")
+    @field_validator("browser_path")
     @classmethod
-    def normalize_optional_text(cls, value: str | None) -> str | None:
+    def require_google_chrome_path(cls, value: Path | None) -> Path | None:
         if value is None:
             return None
-        value = value.strip()
-        return value or None
+        if "chrome" not in value.name.casefold():
+            raise ValueError(
+                "XHS_BROWSER_PATH must point to a Google Chrome executable"
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_security_boundary(self) -> "AppConfig":
-        if self.browser_path is not None and self.browser_channel is not None:
-            raise ValueError("XHS_BROWSER_PATH and XHS_BROWSER_CHANNEL are mutually exclusive")
         if self.comment_timeout_seconds > self.max_comment_timeout_seconds:
             raise ValueError(
                 "XHS_COMMENT_TIMEOUT_SECONDS cannot exceed XHS_MAX_COMMENT_TIMEOUT_SECONDS"

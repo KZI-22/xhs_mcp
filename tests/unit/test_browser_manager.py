@@ -2,7 +2,11 @@ import asyncio
 from pathlib import Path
 
 from xhs_read_mcp.browser.auth_store import AuthStateStore
-from xhs_read_mcp.browser.manager import BrowserManager, build_proxy_settings
+from xhs_read_mcp.browser.manager import (
+    GOOGLE_CHROME_CHANNEL,
+    BrowserManager,
+    build_proxy_settings,
+)
 from xhs_read_mcp.config import AppConfig
 
 
@@ -117,6 +121,41 @@ async def test_page_lease_closes_page_and_persists_state(tmp_path: Path) -> None
     assert await manager.persist_state()
     assert (await store.load())["cookies"][0]["name"] == "session"
     await manager.close()
+
+
+async def test_default_launch_uses_google_chrome_channel(tmp_path: Path) -> None:
+    manager, _, fake = make_manager(tmp_path)
+
+    await manager.start()
+
+    assert fake.chromium.launch_options == {
+        "headless": False,
+        "channel": GOOGLE_CHROME_CHANNEL,
+    }
+    await manager.close(save_state=False)
+
+
+async def test_custom_google_chrome_path_replaces_channel(tmp_path: Path) -> None:
+    fake = FakePlaywright()
+    chrome_path = tmp_path / "chrome.exe"
+    config = AppConfig(
+        _env_file=None,
+        auth_state_path=tmp_path / "state.json",
+        browser_path=chrome_path,
+    )
+    manager = BrowserManager(
+        config,
+        AuthStateStore(config.auth_state_path),
+        playwright_factory=lambda: FakePlaywrightManager(fake),
+    )
+
+    await manager.start()
+
+    assert fake.chromium.launch_options == {
+        "headless": False,
+        "executable_path": str(chrome_path),
+    }
+    await manager.close(save_state=False)
 
 
 async def test_clear_auth_state_replaces_context_and_deletes_file(tmp_path: Path) -> None:

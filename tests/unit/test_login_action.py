@@ -12,7 +12,9 @@ from xhs_read_mcp.browser.page_contract import (
     LOGIN_DIAGNOSTICS_SCRIPT,
     LOGIN_STATE_SCRIPT,
     LOGIN_SURFACE_TRIGGER_SELECTORS,
+    MANUAL_VERIFICATION_SELECTORS,
     QR_CODE_SELECTORS,
+    QR_LOGIN_ENTRY_SELECTORS,
 )
 from xhs_read_mcp.config import AppConfig
 from xhs_read_mcp.errors import ErrorCode, XhsError
@@ -210,6 +212,63 @@ async def test_login_placeholder_input_click_reveals_scannable_qr() -> None:
 
     assert not logged_in
     assert qr_png == b"png"
+    assert page.clicked == [entry_selector]
+
+
+async def test_headed_login_keeps_manual_verification_page_open() -> None:
+    entry_selector = LOGIN_ENTRY_SELECTORS[0]
+    manual_selector = MANUAL_VERIFICATION_SELECTORS[0]
+    page: FakeLoginPage
+
+    def reveal_verification(selector: str) -> None:
+        if selector == entry_selector:
+            page.visible[manual_selector] = "验证码"
+
+    page = FakeLoginPage(
+        initial_state=False,
+        visible={entry_selector: "登录"},
+        on_click=reveal_verification,
+    )
+    action = LoginAction(AppConfig(_env_file=None, browser_headless=False))
+
+    logged_in, qr_png = await action.prepare_login(page, timeout_seconds=0.1)
+
+    assert not logged_in
+    assert qr_png is None
+    assert page.clicked == [entry_selector]
+
+
+async def test_headed_login_keeps_unknown_login_surface_open() -> None:
+    entry_selector = LOGIN_ENTRY_SELECTORS[0]
+    page = FakeLoginPage(
+        initial_state=False,
+        visible={entry_selector: "登录"},
+    )
+    action = LoginAction(AppConfig(_env_file=None, browser_headless=False))
+
+    logged_in, qr_png = await action.prepare_login(page, timeout_seconds=0.01)
+
+    assert not logged_in
+    assert qr_png is None
+    assert page.clicked == [entry_selector]
+
+
+async def test_headed_login_does_not_force_qr_mode() -> None:
+    entry_selector = LOGIN_ENTRY_SELECTORS[0]
+    qr_mode_selector = QR_LOGIN_ENTRY_SELECTORS[0]
+    page = FakeLoginPage(
+        initial_state=False,
+        visible={
+            entry_selector: "登录",
+            qr_mode_selector: "二维码登录",
+        },
+    )
+    action = LoginAction(AppConfig(_env_file=None, browser_headless=False))
+
+    logged_in, qr_png = await action.prepare_login(page, timeout_seconds=0.01)
+
+    assert not logged_in
+    assert qr_png is None
     assert page.clicked == [entry_selector]
 
 

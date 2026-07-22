@@ -288,7 +288,20 @@ RISK_CONTROL_TEXTS = (
     "IP存在风险",
     "网络环境存在风险",
     "安全限制",
-    "验证码",
+)
+
+MANUAL_VERIFICATION_SELECTORS = (
+    "input[placeholder*='验证码']",
+    "input[aria-label*='验证码']",
+    "input[type='tel']",
+    "[class*='login-container'] input",
+    "button:has-text('获取验证码')",
+    "[role='button']:has-text('获取验证码')",
+    "text=获取验证码",
+    "text=发送验证码",
+    "text=验证码",
+    "iframe[src*='captcha']",
+    "[class*='captcha']",
 )
 SEARCH_EMPTY_RESULT_TEXTS = (
     "没有找到相关结果",

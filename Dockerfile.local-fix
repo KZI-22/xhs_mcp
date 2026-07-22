@@ -1,6 +1,9 @@
-# Reuse the already deployed runtime and Chromium; only overlay reviewed source.
+# Reuse the already deployed runtime, add Google Chrome, and overlay reviewed source.
 FROM ghcr.io/kzi-22/xhs_mcp:latest
 
 ENV PYTHONPATH=/app/src
+
+RUN python -m playwright install --with-deps chrome \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY src /app/src

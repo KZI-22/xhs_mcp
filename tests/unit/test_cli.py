@@ -10,7 +10,7 @@ def test_cli_defaults_defer_to_settings(tmp_path: Path, monkeypatch) -> None:
     config = config_from_args(args)
 
     assert config.mcp_transport == "stdio"
-    assert config.browser_headless
+    assert not config.browser_headless
     assert config.auth_state_path == tmp_path / "state.json"
 
 
@@ -76,4 +76,3 @@ async def test_bearer_middleware_accepts_matching_token() -> None:
     )
 
     assert called
-

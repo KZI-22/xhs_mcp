@@ -13,7 +13,9 @@ def test_default_config_is_local_stdio() -> None:
     assert config.mcp_host == "127.0.0.1"
     assert config.mcp_path == "/mcp"
     assert config.max_concurrent_operations == 2
-    assert config.auth_state_path.name == "storage_state.json"
+    assert not config.browser_headless
+    assert config.browser_path is None
+    assert config.auth_state_path.name == "chrome-storage_state.json"
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "::1", "[::1]", "localhost"])
@@ -49,6 +51,14 @@ def test_explicit_state_path_wins(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert config.auth_state_path == path
 
 
+def test_browser_path_must_point_to_google_chrome() -> None:
+    with pytest.raises(ValidationError, match="Google Chrome"):
+        AppConfig(_env_file=None, browser_path=Path("msedge.exe"))
+
+    chrome_path = Path("C:/Program Files/Google/Chrome/Application/chrome.exe")
+    config = AppConfig(_env_file=None, browser_path=chrome_path)
+    assert config.browser_path == chrome_path
+
+
 def test_mcp_path_is_normalized() -> None:
     assert AppConfig(_env_file=None, mcp_path="custom/").mcp_path == "/custom"
-

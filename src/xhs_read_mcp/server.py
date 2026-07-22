@@ -8,7 +8,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -171,13 +171,16 @@ def create_server(
     mcp = FastMCP(
         name="xhs-read-mcp",
         instructions=(
-            "本地单用户、只读的小红书 MCP。先检查登录；未登录时扫码；"
+            "本地单用户、只读的小红书 MCP。先检查登录；未登录时扫码或在"
+            "有界面 Chrome 中完成人工验证；"
             "搜索结果中的 note_id 和 xsec_token 必须成对用于详情工具。"
         ),
         host=config.mcp_host,
         port=config.mcp_port,
         streamable_http_path=config.mcp_path,
-        stateless_http=True,
+        # Login sessions own a live browser Page and must survive across
+        # xhs_start_login / xhs_get_login_status HTTP requests.
+        stateless_http=False,
         json_response=False,
         log_level=config.log_level,
         lifespan=lifespan,
@@ -202,7 +205,10 @@ def create_server(
 
     @mcp.tool(
         name="xhs_start_login",
-        description="创建或复用一个二维码扫码登录会话，并返回二维码图片。",
+        description=(
+            "创建或复用一个网页登录会话；返回二维码，或提示用户在有界面 Chrome 中"
+            "完成验证码。"
+        ),
         structured_output=False,
         annotations=ToolAnnotations(
             readOnlyHint=False,
@@ -228,14 +234,14 @@ def create_server(
             return _error_result(
                 XhsError(
                     ErrorCode.INTERNAL_ERROR,
-                    "启动扫码登录时发生内部错误。",
+                    "启动网页登录时发生内部错误。",
                     details={"reason": type(exc).__name__},
                 )
             )
 
     @mcp.tool(
         name="xhs_get_login_status",
-        description="根据 login_id 查询二维码扫码登录会话状态。",
+        description="根据 login_id 查询网页登录会话状态。",
         structured_output=False,
         annotations=ToolAnnotations(
             readOnlyHint=True,
@@ -253,7 +259,7 @@ def create_server(
 
     @mcp.tool(
         name="xhs_cancel_login",
-        description="取消指定的二维码扫码登录会话。",
+        description="取消指定的网页登录会话。",
         structured_output=False,
         annotations=ToolAnnotations(
             readOnlyHint=False,

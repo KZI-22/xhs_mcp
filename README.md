@@ -1,11 +1,11 @@
 # xhs-read-mcp
 
-本地单用户、只读的小红书 MCP 服务。项目使用 Python、Playwright Chromium 和官方 MCP Python SDK，通过正常加载小红书网页并读取 `window.__INITIAL_STATE__` 提供结构化数据。
+本地单用户、只读的小红书 MCP 服务。项目使用 Python、Playwright Google Chrome 和官方 MCP Python SDK，通过正常加载小红书网页并读取 `window.__INITIAL_STATE__` 提供结构化数据。
 
 ## 功能范围
 
 - 检查网页登录状态。
-- 返回二维码并在后台等待扫码。
+- 返回二维码并在后台等待扫码，或保留有界面 Chrome 供用户完成验证码。
 - 原子保存和恢复 Playwright storage state。
 - 清除本机登录状态。
 - 按关键词和网页筛选项读取初始搜索结果。
@@ -18,10 +18,10 @@
 ## 环境要求
 
 - Python 3.11 或更高版本。
-- 可运行 Chromium 的本机环境。
+- 已安装 Google Chrome 的本机环境。
 - 能正常访问小红书网页的网络。
 
-使用 Docker Compose 部署时，本机不需要安装 Python 或 Chromium，只需要 Docker Compose v2。
+使用 Docker Compose 部署时，本机不需要安装 Python 或 Google Chrome，只需要 Docker Compose v2。
 
 ## 安装
 
@@ -32,7 +32,7 @@ git clone https://github.com/KZI-22/xhs_mcp.git
 cd xhs_mcp
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[test]"
-.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m playwright install chrome
 ```
 
 也可以使用 uv 安装；项目使用标准 `pyproject.toml`，不依赖特定包管理器。
@@ -60,7 +60,7 @@ http://127.0.0.1:8765/mcp
 Authorization: Bearer <token>
 ```
 
-二维码登录仍通过 `xhs_start_login` 返回，不需要为容器配置桌面或 VNC。登录状态和自动生成的 Token 保存在 `xhs-data` Docker Volume 中，容器升级或重启不会丢失。
+二维码登录仍通过 `xhs_start_login` 返回，不需要为容器配置桌面或 VNC。Docker 默认无头运行，仅支持可在 MCP 客户端完成的二维码流程；如果页面要求短信验证码或其他人工验证，请改用本机默认的有界面模式。登录状态和自动生成的 Token 保存在 `xhs-data` Docker Volume 中，容器升级或重启不会丢失。
 
 更新镜像：
 
@@ -123,9 +123,9 @@ XHS_MCP_AUTH_TOKEN=<strong-random-token>
 | 工具 | 作用 |
 | --- | --- |
 | `xhs_check_login` | 检查已保存登录状态是否有效 |
-| `xhs_start_login` | 创建或复用二维码登录会话 |
-| `xhs_get_login_status` | 根据 `login_id` 查询扫码状态 |
-| `xhs_cancel_login` | 取消扫码会话 |
+| `xhs_start_login` | 创建或复用网页登录会话 |
+| `xhs_get_login_status` | 根据 `login_id` 查询登录状态 |
+| `xhs_cancel_login` | 取消登录会话 |
 | `xhs_logout` | 清除本机状态并重置浏览器上下文 |
 | `xhs_search_notes` | 搜索首次加载的笔记结果 |
 | `xhs_get_note_detail` | 读取详情及可选评论 |
@@ -137,7 +137,7 @@ XHS_MCP_AUTH_TOKEN=<strong-random-token>
 ```text
 xhs_check_login
   -> 未登录：xhs_start_login
-  -> 用户扫码
+  -> 用户扫码；或在已打开的 Chrome 中输入手机号、验证码
   -> xhs_get_login_status
   -> xhs_search_notes
   -> 从同一条结果取 note_id + xsec_token
@@ -145,6 +145,11 @@ xhs_check_login
 ```
 
 搜索和详情默认要求有效登录，不会自动弹出二维码或偷偷退回匿名抓取。
+
+本机默认以有界面模式启动固定的 Google Chrome，并使用独立的
+`chrome-storage_state.json`。如果小红书展示短信验证码或其他安全验证，
+`xhs_start_login` 会保持该 Chrome 窗口和登录会话；用户直接在窗口中完成验证，
+随后通过 `xhs_get_login_status` 查询结果。项目不会代填、绕过或破解验证码。
 
 ### 搜索筛选枚举
 
@@ -209,9 +214,8 @@ CLI > 环境变量 > .env > 默认值
 | `XHS_MCP_ALLOW_NON_LOOPBACK` | `false` |
 | `XHS_MCP_ALLOWED_HOSTS` | 空，逗号分隔 |
 | `XHS_MCP_ALLOWED_ORIGINS` | 空，逗号分隔 |
-| `XHS_BROWSER_HEADLESS` | `true` |
-| `XHS_BROWSER_PATH` | Playwright 管理的 Chromium |
-| `XHS_BROWSER_CHANNEL` | 空 |
+| `XHS_BROWSER_HEADLESS` | `false`；本机建议保留有界面以完成人工验证 |
+| `XHS_BROWSER_PATH` | 空；仅用于非标准安装位置的 Google Chrome |
 | `XHS_PROXY` | 空 |
 | `XHS_AUTH_STATE_PATH` | 平台用户数据目录 |
 | `XHS_MAX_CONCURRENT_OPERATIONS` | `2` |
@@ -226,20 +230,22 @@ CLI > 环境变量 > .env > 默认值
 Windows 默认状态文件：
 
 ```text
-%LOCALAPPDATA%\xhs-read-mcp\storage_state.json
+%LOCALAPPDATA%\xhs-read-mcp\chrome-storage_state.json
 ```
 
 该文件包含敏感登录状态，不应上传、分享或提交到版本控制。`xhs_logout` 只删除本机状态，不声称吊销小红书服务器端 Cookie。
 
+从旧版本升级时，原来的 `storage_state.json` 不会自动注入 Google Chrome；请通过 `xhs_start_login` 重新登录。旧文件不会被自动删除。
+
 ## 测试
 
-默认单元测试，不访问小红书，也不启动 Chromium：
+默认单元测试，不访问小红书，也不启动 Google Chrome：
 
 ```powershell
 python -m pytest
 ```
 
-本地 Chromium 集成测试，不访问小红书：
+本地 Google Chrome 集成测试，不访问小红书：
 
 ```powershell
 python -m pytest -m browser
@@ -261,14 +267,14 @@ MCP tools
     -> XhsReadService
         -> LoginAction / SearchAction / FeedDetailAction / CommentLoader
             -> BrowserManager / AuthStateStore / PageContract
-                -> Playwright Chromium
+                -> Playwright Google Chrome
                     -> 小红书 DOM 与 window.__INITIAL_STATE__
 ```
 
-一个 MCP 进程长期运行一个 Chromium 和一个共享登录 BrowserContext；每次普通调用使用独立 Page，默认最多两个并发浏览器操作。
+一个 MCP 进程长期运行一个 Google Chrome 和一个共享登录 BrowserContext；每次普通调用使用独立 Page，默认最多两个并发浏览器操作。
 
 ## 当前验证状态
 
 - 单元测试覆盖配置、模型、错误、状态存储、浏览器管理、登录状态机、搜索、详情、评论、Service、CLI 和 MCP schema。
-- 本地 Chromium 生命周期测试已覆盖 Page 回收、状态保存和浏览器重建。
+- 本地 Google Chrome 生命周期测试已覆盖 Page 回收、状态保存和浏览器重建。
 - 真实小红书页面测试必须由使用者显式运行；网页选择器和内部状态路径可能随网站更新而变化。

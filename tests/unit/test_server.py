@@ -48,6 +48,12 @@ async def test_stdio_and_http_have_identical_tool_schemas(tmp_path: Path) -> Non
     assert stdio == http
 
 
+def test_http_server_preserves_browser_login_sessions(tmp_path: Path) -> None:
+    server = create_server(config(tmp_path, "streamable-http"))
+
+    assert not server.settings.stateless_http
+
+
 def test_success_result_has_structured_content_and_optional_image() -> None:
     result = _success_result(
         LogoutResult(cleared=True, message="done"),

@@ -33,6 +33,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra -m 'not browser and not live_xhs'"
 markers = [
-    "browser: requires a locally installed Playwright Chromium",
+    "browser: requires a locally installed Google Chrome",
     "live_xhs: accesses the real Xiaohongshu website and may require manual login",
 ]

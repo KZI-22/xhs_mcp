@@ -8,7 +8,7 @@ from xhs_read_mcp.config import AppConfig
 
 
 @pytest.mark.browser
-async def test_real_chromium_page_lifecycle_and_state_save(tmp_path: Path) -> None:
+async def test_real_chrome_page_lifecycle_and_state_save(tmp_path: Path) -> None:
     config = AppConfig(
         _env_file=None,
         browser_headless=True,
@@ -29,7 +29,7 @@ async def test_real_chromium_page_lifecycle_and_state_save(tmp_path: Path) -> No
 
 
 @pytest.mark.browser
-async def test_real_chromium_rebuilds_once_after_disconnect(tmp_path: Path) -> None:
+async def test_real_chrome_rebuilds_once_after_disconnect(tmp_path: Path) -> None:
     config = AppConfig(
         _env_file=None,
         browser_headless=True,
@@ -48,4 +48,3 @@ async def test_real_chromium_rebuilds_once_after_disconnect(tmp_path: Path) -> N
         assert manager._browser is not original_browser
     finally:
         await manager.close(save_state=False)
-

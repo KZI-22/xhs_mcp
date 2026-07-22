@@ -21,7 +21,7 @@ services:
       XHS_MCP_ALLOWED_HOSTS: localhost:8765,127.0.0.1:8765
       XHS_MCP_ALLOWED_ORIGINS: http://localhost:8765,http://127.0.0.1:8765
       XHS_BROWSER_HEADLESS: "true"
-      XHS_AUTH_STATE_PATH: /data/storage_state.json
+      XHS_AUTH_STATE_PATH: /data/chrome-storage_state.json
       XHS_DEBUG_ARTIFACTS_PATH: /data/debug-artifacts
 
     volumes:

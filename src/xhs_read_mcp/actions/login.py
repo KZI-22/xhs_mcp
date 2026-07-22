@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
@@ -29,6 +29,7 @@ from xhs_read_mcp.browser.page_contract import (
     LOGIN_ENTRY_TEXTS,
     LOGIN_STATE_SCRIPT,
     LOGIN_SURFACE_TRIGGER_SELECTORS,
+    MANUAL_VERIFICATION_SELECTORS,
     QR_CODE_SELECTORS,
     QR_LOGIN_ENTRY_SELECTORS,
     QR_LOGIN_ENTRY_TEXTS,
@@ -51,6 +52,10 @@ class LoginPageAction(Protocol):
 
 
 _LOGIN_POLL_SECONDS = 0.2
+_MANUAL_LOGIN_MESSAGE = (
+    "请在已打开的 Google Chrome 中完成手机号、验证码或其他安全验证；"
+    "完成后会自动保存登录状态。"
+)
 logger = logging.getLogger("xhs_read_mcp.login")
 
 
@@ -132,6 +137,9 @@ def _write_debug_artifact(
 
 class LoginAction:
     def __init__(self, config: AppConfig | None = None) -> None:
+        self._allow_manual_verification = bool(
+            config is not None and not config.browser_headless
+        )
         self._debug_artifacts = bool(config and config.debug_artifacts)
         self._debug_artifacts_path = config.debug_artifacts_path if config else None
         self._debug_artifacts_limit = config.debug_artifacts_limit if config else 20
@@ -286,9 +294,23 @@ class LoginAction:
                 ) from exc
 
         qr_mode_clicked = False
+        manual_fallback_at = min(deadline, loop.time() + 3.0)
         while qr is None:
             await raise_for_page_problem(page, check_login_expired=False)
-            if not qr_mode_clicked:
+            if await page.evaluate(LOGIN_STATE_SCRIPT) is True:
+                return True, None
+            if await _first_visible(page, LOGGED_IN_SELECTORS) is not None:
+                return True, None
+            qr = await _first_visible(page, QR_CODE_SELECTORS)
+            if qr is not None:
+                break
+            if (
+                self._allow_manual_verification
+                and await _first_visible(page, MANUAL_VERIFICATION_SELECTORS)
+                is not None
+            ):
+                return False, None
+            if not qr_mode_clicked and not self._allow_manual_verification:
                 qr_mode = await _semantic_entry(
                     page, QR_LOGIN_ENTRY_SELECTORS, QR_LOGIN_ENTRY_TEXTS
                 )
@@ -298,12 +320,23 @@ class LoginAction:
                     )
                     qr_mode_clicked = True
             qr = await _first_visible(page, QR_CODE_SELECTORS)
+            if (
+                self._allow_manual_verification
+                and loop.time() >= manual_fallback_at
+            ):
+                return False, None
             remaining = deadline - loop.time()
             if qr is not None or remaining <= 0:
                 break
             await asyncio.sleep(min(_LOGIN_POLL_SECONDS, remaining))
 
         if qr is None:
+            if self._allow_manual_verification:
+                # Headed mode is deliberately tolerant of login UI changes. Once the
+                # verified login entry has opened, keeping the page available for the
+                # user is safer than requiring every SMS/captcha widget to have a
+                # stable selector.
+                return False, None
             raise XhsError(
                 ErrorCode.PAGE_STRUCTURE_CHANGED,
                 "登录界面已触发，但未找到可扫描的二维码。",
@@ -359,7 +392,7 @@ class _LoginSession:
 
 
 class LoginCoordinator:
-    """Own the single background QR login session."""
+    """Own the single background browser login session."""
 
     def __init__(
         self,
@@ -388,6 +421,11 @@ class LoginCoordinator:
                 login_id=uuid4().hex,
                 created_at=now,
                 expires_at=now + timedelta(seconds=self.config.login_timeout_seconds),
+                message=(
+                    _MANUAL_LOGIN_MESSAGE
+                    if not self.config.browser_headless
+                    else ""
+                ),
                 ready=asyncio.get_running_loop().create_future(),
             )
             session.task = asyncio.create_task(
@@ -399,6 +437,8 @@ class LoginCoordinator:
 
         if previous_task is not None:
             await asyncio.gather(previous_task, return_exceptions=True)
+        if not self.config.browser_headless:
+            return self._start_snapshot(session)
         assert session.ready is not None
         await session.ready
         if session.error is not None:
@@ -447,7 +487,11 @@ class LoginCoordinator:
                     return
 
                 session.qr_png = qr_png
-                session.message = "请使用小红书客户端扫描二维码。"
+                session.message = (
+                    "请使用小红书客户端扫描二维码。"
+                    if qr_png is not None
+                    else _MANUAL_LOGIN_MESSAGE
+                )
                 self.browser_manager.mark_authentication_possible()
                 self._set_ready(session)
                 succeeded = await self.action.wait_for_login(
@@ -455,15 +499,15 @@ class LoginCoordinator:
                 )
                 if not succeeded:
                     session.status = LoginSessionStatus.EXPIRED
-                    session.message = "登录二维码已过期。"
+                    session.message = "登录会话已过期。"
                     return
                 await self.browser_manager.persist_state()
                 self.browser_manager.mark_operation_success()
                 session.status = LoginSessionStatus.SUCCEEDED
-                session.message = "扫码登录成功，登录状态已保存。"
+                session.message = "登录成功，登录状态已保存。"
         except asyncio.CancelledError:
             session.status = LoginSessionStatus.CANCELLED
-            session.message = "扫码登录已取消。"
+            session.message = "登录已取消。"
             self._set_ready(session)
             raise
         except XhsError as exc:
@@ -481,7 +525,7 @@ class LoginCoordinator:
             )
         except Exception as exc:
             session.status = LoginSessionStatus.FAILED
-            session.message = "扫码登录任务发生内部错误。"
+            session.message = "登录任务发生内部错误。"
             session.error = XhsError(
                 ErrorCode.INTERNAL_ERROR,
                 session.message,
@@ -513,7 +557,7 @@ class LoginCoordinator:
         if self._session is None or self._session.login_id != login_id:
             raise XhsError(
                 ErrorCode.LOGIN_SESSION_NOT_FOUND,
-                "没有找到指定的扫码登录会话。",
+                "没有找到指定的网页登录会话。",
                 retryable=False,
             )
         return self._session

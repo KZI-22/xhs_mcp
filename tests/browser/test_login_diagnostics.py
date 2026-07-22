@@ -9,7 +9,7 @@ pytestmark = pytest.mark.browser
 
 async def test_login_diagnostics_distinguish_dom_pseudo_and_shadow_candidates() -> None:
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(channel="chrome", headless=True)
         page = await browser.new_page()
         await page.set_content(
             """

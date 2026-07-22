@@ -61,8 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     browser_mode.add_argument("--headless", action="store_true", dest="headless")
     browser_mode.add_argument("--headed", action="store_false", dest="headless")
     parser.set_defaults(headless=None)
-    parser.add_argument("--browser-path", type=Path, default=None)
-    parser.add_argument("--browser-channel", default=None)
+    parser.add_argument(
+        "--browser-path",
+        type=Path,
+        default=None,
+        help="Path to a custom Google Chrome executable",
+    )
     parser.add_argument("--auth-state-path", type=Path, default=None)
     parser.add_argument(
         "--log-level",
@@ -82,7 +86,6 @@ def config_from_args(args: argparse.Namespace) -> AppConfig:
         "mcp_allow_non_loopback": args.allow_non_loopback,
         "browser_headless": args.headless,
         "browser_path": args.browser_path,
-        "browser_channel": args.browser_channel,
         "auth_state_path": args.auth_state_path,
         "log_level": args.log_level,
     }
@@ -124,4 +127,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-
